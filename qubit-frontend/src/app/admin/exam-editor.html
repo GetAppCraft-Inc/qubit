@@ -1,0 +1,590 @@
+<div class="page">
+  <a routerLink="/admin/exams" class="back small">← Exams</a>
+
+  <div class="head">
+    <div>
+      @if (exam(); as e) {
+        <p class="eyebrow">{{ labels[e.category] }} · {{ e.code }}</p>
+        <h1>{{ e.title }}</h1>
+        <p class="meta">
+          <span [class]="statusBadge()!.cls">{{ statusBadge()!.label }}</span>
+          <span>{{ e.durationMinutes | duration }}</span>
+          <span>{{ e.questions.length }} questions · {{ e.totalMarks }} marks</span>
+          <span>{{ e.registrationCount }} registered</span>
+        </p>
+      } @else {
+        <p class="eyebrow">New exam</p>
+        <h1>Set up an exam</h1>
+      }
+    </div>
+    @if (exam(); as e) {
+      <div class="row row-wrap">
+        @if (e.status === 'DRAFT') {
+          <button class="btn btn-ghost" type="button" (click)="deleteExam()" [disabled]="busy()">Delete</button>
+          <button class="btn btn-brand" type="button" (click)="setStatus('publish')" [disabled]="busy()">Publish</button>
+        }
+        @if (e.status === 'PUBLISHED') {
+          @if (e.registrationCount === 0) {
+            <button class="btn btn-ghost" type="button" (click)="setStatus('unpublish')" [disabled]="busy()">Move to draft</button>
+          }
+          <button class="btn btn-danger-ghost" type="button" (click)="setStatus('close')" [disabled]="busy()">Close exam</button>
+        }
+        @if (e.status === 'CLOSED') {
+          <button class="btn btn-ghost" type="button" (click)="setStatus('publish')" [disabled]="busy()">Reopen</button>
+        }
+      </div>
+    }
+  </div>
+
+  @if (error()) { <div class="alert alert-danger">{{ error() }}</div> }
+  @if (exam()?.locked) {
+    <div class="alert alert-warn lock-note">Candidates have started this exam. Questions and duration are locked so every attempt is marked the same way.</div>
+  }
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" [class.active]="tab() === 'details'" (click)="openTab('details')">Details</button>
+    <button class="tab" role="tab" [class.active]="tab() === 'questions'" [disabled]="isNew()" (click)="openTab('questions')">
+      Questions<span class="count">{{ exam()?.questions?.length ?? 0 }}</span>
+    </button>
+    @if (exam()?.mode !== 'OPEN') {
+      <button class="tab" role="tab" [class.active]="tab() === 'slots'" [disabled]="isNew()" (click)="openTab('slots')">
+        Slots<span class="count">{{ exam()?.slots?.length ?? 0 }}</span>
+      </button>
+    }
+    <button class="tab" role="tab" [class.active]="tab() === 'candidates'" [disabled]="isNew()" (click)="openTab('candidates')">
+      {{ exam()?.mode === 'OPEN' ? 'Responses' : 'Candidates' }}<span class="count">{{ exam()?.registrationCount ?? 0 }}</span>
+    </button>
+    <button class="tab" role="tab" [class.active]="tab() === 'analytics'" [disabled]="isNew()" (click)="openTab('analytics')">Analytics</button>
+  </div>
+
+  @if (loading()) {
+    <div class="skeleton" style="height: 320px"></div>
+  } @else {
+    @switch (tab()) {
+
+      <!-- ═══════════════ details ═══════════════ -->
+      @case ('details') {
+        <form [formGroup]="form" (ngSubmit)="saveDetails()" class="details" novalidate>
+          <section class="fs">
+            <div class="fs-label"><h3>Format</h3><p>How strictly the paper is run. Can't change once candidates register.</p></div>
+            <div class="fs-body">
+              <div class="modes" role="radiogroup">
+                <label class="mode" [class.on]="form.controls.mode.value === 'PROCTORED'">
+                  <input type="radio" formControlName="mode" value="PROCTORED" />
+                  <strong>Proctored exam</strong>
+                  <span>Scheduled slots, hall tickets, a locked full-screen window. Violations can end the attempt.</span>
+                </label>
+                <label class="mode" [class.on]="form.controls.mode.value === 'OPEN'">
+                  <input type="radio" formControlName="mode" value="OPEN" />
+                  <strong>Open quiz</strong>
+                  <span>Like a form: no slots, take it any time in the window, no lockdown. Good for practice and homework.</span>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="fs">
+            <div class="fs-label"><h3>Basics</h3><p>How the exam appears to candidates.</p></div>
+            <div class="fs-body">
+              <div class="grid-2">
+                <div class="field">
+                  <label for="title">Title</label>
+                  <input id="title" class="input" formControlName="title" placeholder="JEE Main · Full Mock 07" />
+                </div>
+                <div class="field">
+                  <label for="code">Code</label>
+                  <input id="code" class="input mono" formControlName="code" placeholder="JEEM-FM07" />
+                  <span class="hint">Unique. Letters, numbers and dashes.</span>
+                </div>
+              </div>
+              <div class="field">
+                <label for="category">Exam type</label>
+                <select id="category" class="select" formControlName="category">
+                  @for (c of categories; track c) { <option [value]="c">{{ labels[c] }}</option> }
+                </select>
+              </div>
+              <div class="field">
+                <label for="desc">Short description</label>
+                <textarea id="desc" class="textarea" rows="3" formControlName="description" placeholder="Full-length paper on the latest pattern. Covers the complete Class 11 & 12 syllabus."></textarea>
+              </div>
+            </div>
+          </section>
+
+          <section class="fs">
+            <div class="fs-label"><h3>Timing &amp; integrity</h3><p>The clock and how strict the exam window is.</p></div>
+            <div class="fs-body">
+              <div class="grid-3">
+                <div class="field">
+                  <label for="dur">Duration (min)</label>
+                  <input id="dur" class="input mono" type="number" min="5" max="600" formControlName="durationMinutes" />
+                </div>
+                @if (form.controls.mode.value !== 'OPEN') {
+                  <div class="field">
+                    <label for="late">Late entry (min)</label>
+                    <input id="late" class="input mono" type="number" min="0" max="120" formControlName="lateEntryMinutes" />
+                    <span class="hint">Window after slot start to begin.</span>
+                  </div>
+                  <div class="field">
+                    <label for="tol">Warnings allowed</label>
+                    <input id="tol" class="input mono" type="number" min="0" max="10" formControlName="violationTolerance" />
+                    <span class="hint">0 = act on the first violation.</span>
+                  </div>
+                }
+              </div>
+              @if (form.controls.mode.value !== 'OPEN') {
+                <p class="sub-label">When a candidate goes past the warning limit</p>
+                <div class="modes" role="radiogroup" style="margin-bottom: 14px">
+                  <label class="mode" [class.on]="form.controls.integrityAction.value === 'REVIEW'">
+                    <input type="radio" formControlName="integrityAction" value="REVIEW" />
+                    <strong>Flag for an invigilator</strong>
+                    <span>The candidate keeps writing; invigilators are alerted and choose to cancel the attempt or let it continue.</span>
+                  </label>
+                  <label class="mode" [class.on]="form.controls.integrityAction.value === 'TERMINATE'">
+                    <input type="radio" formControlName="integrityAction" value="TERMINATE" />
+                    <strong>End the attempt automatically</strong>
+                    <span>Closed on the spot as cheating detected. Invigilators are still notified, and the candidate can appeal.</span>
+                  </label>
+                </div>
+              }
+              <label class="check"><input type="checkbox" formControlName="showResults" /> <span>Show score to candidates as soon as they submit</span></label>
+            </div>
+          </section>
+
+          <section class="fs">
+            <div class="fs-label">
+              @if (form.controls.mode.value === 'OPEN') {
+                <h3>Availability</h3><p>When the quiz accepts responses. Leave “Closes” blank for no deadline.</p>
+              } @else {
+                <h3>Registration window</h3><p>Leave blank to keep registration open until the last slot.</p>
+              }
+            </div>
+            <div class="fs-body">
+              <div class="grid-2">
+                <div class="field">
+                  <label for="ro">Opens</label>
+                  <input id="ro" class="input" type="datetime-local" formControlName="registrationOpensAt" />
+                </div>
+                <div class="field">
+                  <label for="rc">Closes</label>
+                  <input id="rc" class="input" type="datetime-local" formControlName="registrationClosesAt" />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="fs">
+            <div class="fs-label"><h3>Instructions</h3><p>Shown in the exam lobby before the candidate begins.</p></div>
+            <div class="fs-body">
+              <textarea class="textarea" rows="6" formControlName="instructions" placeholder="Each question carries 4 marks. 1 mark is deducted for every wrong answer in Sections A…"></textarea>
+            </div>
+          </section>
+
+          <section class="fs">
+            <div class="fs-label"><h3>Integrations</h3><p>Send each finished attempt to another app — a CRM, an LMS, a sheet via Zapier/Make.</p></div>
+            <div class="fs-body">
+              <div class="field">
+                <label for="hook">Webhook URL</label>
+                <input id="hook" class="input mono" formControlName="webhookUrl" placeholder="https://example.com/hooks/qubit" />
+                <span class="hint">We POST JSON (<code>attempt.finished</code>) signed with <code>X-Qubit-Signature: v1=HMAC-SHA256(secret, timestamp + "." + body)</code>.</span>
+              </div>
+              @if (exam()?.webhookSecret; as secret) {
+                <div class="secret">
+                  <span class="label">Signing secret</span>
+                  <code class="mono">{{ secretVisible() ? secret : secret.slice(0, 10) + '••••••••••••••••' }}</code>
+                  <button type="button" class="btn btn-quiet btn-sm" (click)="secretVisible.set(!secretVisible())">{{ secretVisible() ? 'Hide' : 'Reveal' }}</button>
+                  <button type="button" class="btn btn-quiet btn-sm" (click)="copy(secret, 'Secret')">Copy</button>
+                  <button type="button" class="btn btn-quiet btn-sm" (click)="rotateSecret()">Rotate</button>
+                </div>
+                <div class="row">
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="testWebhook()" [disabled]="busy()">Send test event</button>
+                  @if (hookResult(); as h) {
+                    <span [class]="h.ok ? 'badge badge-ok' : 'badge badge-danger'">{{ h.ok ? 'HTTP ' + h.status : 'Failed' }}</span>
+                    <span class="small muted">{{ h.message }}</span>
+                  }
+                </div>
+              }
+              @if (exam(); as e) {
+                <div class="field">
+                  <span class="label">Shareable link</span>
+                  <div class="row">
+                    <code class="mono share">{{ shareLink() }}</code>
+                    <button type="button" class="btn btn-ghost btn-sm" (click)="copy(shareLink(), 'Link')">Copy</button>
+                  </div>
+                  <span class="hint">Candidates sign in, then land straight on this {{ e.mode === 'OPEN' ? 'quiz' : 'exam' }}.</span>
+                </div>
+              }
+            </div>
+          </section>
+
+          <div class="save-bar">
+            <button class="btn btn-primary" type="submit" [disabled]="busy()">
+              @if (busy()) { <span class="spinner"></span> } {{ isNew() ? 'Create exam' : 'Save details' }}
+            </button>
+          </div>
+        </form>
+      }
+
+      <!-- ═══════════════ questions ═══════════════ -->
+      @case ('questions') {
+        @if (exam(); as e) {
+          <div class="q-toolbar">
+            <div class="breakdown">
+              @for (s of subjectBreakdown(); track s.subject) {
+                <span><strong>{{ s.subject }}</strong> {{ s.count }} · {{ s.marks }} marks</span>
+              } @empty {
+                <span class="muted">No questions yet.</span>
+              }
+            </div>
+            @if (!e.locked) {
+              <div class="row">
+                <button class="btn btn-ghost" type="button" (click)="importOpen.set(true)">Import JSON</button>
+                <button class="btn btn-primary" type="button" (click)="newQuestion()" [disabled]="!!draft() && !draft()!.id">Add question</button>
+              </div>
+            }
+          </div>
+
+          @if (draft(); as d) {
+            <section class="qform card">
+              <div class="card-head">
+                <h3>{{ d.id ? 'Edit question' : 'New question' }}</h3>
+                <button type="button" class="btn btn-quiet btn-sm" (click)="draft.set(null)">Close</button>
+              </div>
+              <div class="card-pad stack">
+                <div class="grid-3">
+                  <div class="field">
+                    <label for="qs">Subject / section</label>
+                    <input id="qs" class="input" list="subjects" [value]="d.subject" (input)="patchDraft({ subject: $any($event.target).value })" />
+                    <datalist id="subjects">@for (s of subjects; track s) { <option [value]="s"></option> }</datalist>
+                  </div>
+                  <div class="field">
+                    <label for="qm">Marks</label>
+                    <input id="qm" class="input mono" type="number" min="0" [value]="d.marks" (input)="patchDraft({ marks: +$any($event.target).value })" />
+                  </div>
+                  <div class="field">
+                    <label for="qn">Negative marks</label>
+                    <input id="qn" class="input mono" type="number" min="0" [value]="d.negativeMarks" (input)="patchDraft({ negativeMarks: +$any($event.target).value })" />
+                  </div>
+                </div>
+
+                <div class="field">
+                  <span class="label">Answer type</span>
+                  <div class="seg" role="radiogroup">
+                    <button type="button" role="radio" [class.on]="d.type === 'SINGLE'" [attr.aria-checked]="d.type === 'SINGLE'" (click)="setType('SINGLE')">Single correct</button>
+                    <button type="button" role="radio" [class.on]="d.type === 'MULTIPLE'" [attr.aria-checked]="d.type === 'MULTIPLE'" (click)="setType('MULTIPLE')">Multiple correct</button>
+                    <button type="button" role="radio" [class.on]="d.type === 'NUMERIC'" [attr.aria-checked]="d.type === 'NUMERIC'" (click)="setType('NUMERIC')">Numeric</button>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="qsec">Section heading <span class="faint">(optional)</span></label>
+                  <input id="qsec" class="input" [value]="d.section" (input)="patchDraft({ section: $any($event.target).value })"
+                         placeholder="Section 2 · One or more correct" />
+                </div>
+
+                <div class="field">
+                  <label for="qt">Question</label>
+                  <textarea id="qt" class="textarea" rows="4" [value]="d.text" (input)="patchDraft({ text: $any($event.target).value })"
+                            placeholder="Type the question. Use $x^2$ for inline maths and $$\int_0^1 f(x)\,dx$$ for display maths."></textarea>
+                  @if (d.text.includes('$')) {
+                    <div class="preview"><span class="eyebrow">Preview</span><app-math [text]="d.text" /></div>
+                  }
+                </div>
+
+                <div class="field">
+                  <span class="label">Figure <span class="faint">(optional · PNG/JPEG/SVG up to 1.2 MB)</span></span>
+                  @if (d.imageData) {
+                    <div class="fig-edit">
+                      <img [src]="d.imageData" alt="Question figure" />
+                      <button type="button" class="btn btn-quiet btn-sm" (click)="patchDraft({ imageData: null })">Remove</button>
+                    </div>
+                  }
+                  <label class="btn btn-ghost btn-sm upload">
+                    {{ d.imageData ? 'Replace image' : 'Upload image' }}
+                    <input type="file" accept="image/*" (change)="onImagePicked($any($event.target))" />
+                  </label>
+                </div>
+
+                @if (d.type === 'NUMERIC') {
+                  <div class="grid-2" style="max-width: 540px">
+                    <div class="field">
+                      <label for="qa">Correct value</label>
+                      <input id="qa" class="input mono" inputmode="decimal" [value]="d.numeric" (input)="patchDraft({ numeric: $any($event.target).value })" placeholder="e.g. 35 or 2.5" />
+                    </div>
+                    <div class="field">
+                      <label for="qtol">Accept ± <span class="faint">(optional)</span></label>
+                      <input id="qtol" class="input mono" inputmode="decimal" [value]="d.tolerance" (input)="patchDraft({ tolerance: $any($event.target).value })" placeholder="0.01" />
+                      <span class="hint">For “round off to two decimals”, use 0.01.</span>
+                    </div>
+                  </div>
+                } @else {
+                  <div class="field">
+                    <span class="label">Options <span class="faint">— {{ d.type === 'SINGLE' ? 'pick the correct one' : 'tick every correct one' }}</span></span>
+                    <ul class="opt-edit">
+                      @for (o of d.options; track $index) {
+                        <li [class.correct]="d.correct.includes($index)">
+                          <button type="button" class="mark" (click)="toggleCorrect($index)"
+                                  [attr.aria-label]="'Mark option ' + letter($index) + ' correct'" [attr.aria-pressed]="d.correct.includes($index)">
+                            {{ letter($index) }}
+                          </button>
+                          <input class="input" [value]="o" (input)="setOption($index, $any($event.target).value)" [placeholder]="'Option ' + letter($index)" />
+                          <button type="button" class="btn btn-quiet btn-sm" (click)="removeOption($index)" [disabled]="d.options.length <= 2" aria-label="Remove option">✕</button>
+                        </li>
+                      }
+                    </ul>
+                    @if (d.options.length < 8) {
+                      <button type="button" class="link small add-opt" (click)="addOption()">+ Add option</button>
+                    }
+                  </div>
+                  @if (d.type === 'MULTIPLE') {
+                    <label class="check">
+                      <input type="checkbox" [checked]="d.partialMarking" (change)="patchDraft({ partialMarking: $any($event.target).checked })" />
+                      <span>JEE Advanced partial marking — +1 per correct option picked when no wrong option is picked; full marks only for all of them</span>
+                    </label>
+                  }
+                }
+
+                <div class="row" style="justify-content: flex-end">
+                  <button type="button" class="btn btn-quiet" (click)="draft.set(null)">Cancel</button>
+                  <button type="button" class="btn btn-primary" (click)="saveQuestion()" [disabled]="busy()">
+                    {{ d.id ? 'Save changes' : 'Add question' }}
+                  </button>
+                </div>
+              </div>
+            </section>
+          }
+
+          @if (e.questions.length > 0) {
+            <ol class="qlist">
+              @for (q of e.questions; track q.id; let i = $index) {
+                <li>
+                  <span class="qn mono">{{ i + 1 }}</span>
+                  <div class="qbody">
+                    <div class="qmeta mono">
+                      {{ q.subject }}@if (q.section) { · {{ q.section }} } · {{ q.type === 'SINGLE' ? 'Single' : q.type === 'MULTIPLE' ? 'Multiple' : 'Numeric' }} · +{{ q.marks }} / −{{ q.negativeMarks }}
+                      @if (q.partialMarking) { · partial }
+                    </div>
+                    <p class="qtext"><app-math [text]="q.text" /></p>
+                    @if (q.imageUrl) { <img class="qfig" [src]="q.imageUrl" alt="Figure for question {{ i + 1 }}" loading="lazy" /> }
+                    @if (q.options.length) {
+                      <ul class="qopts">
+                        @for (o of q.options; track $index) {
+                          <li [class.right]="q.correctAnswer.split(',').includes('' + $index)"><b class="mono">{{ letter($index) }}</b><app-math [text]="o" /></li>
+                        }
+                      </ul>
+                    } @else {
+                      <p class="qans">Answer: <span class="mono">{{ answerText(q) }}@if (q.answerTolerance) { ± {{ q.answerTolerance }} }</span></p>
+                    }
+                  </div>
+                  @if (!e.locked) {
+                    <div class="qact">
+                      <button class="btn btn-quiet btn-sm" type="button" (click)="editQuestion(q)">Edit</button>
+                      <button class="btn btn-quiet btn-sm danger" type="button" (click)="deleteQuestion(q, i)">Delete</button>
+                    </div>
+                  }
+                </li>
+              }
+            </ol>
+          } @else if (!draft()) {
+            <div class="card empty">
+              <h3>No questions yet</h3>
+              <p>Add them one at a time, or paste a batch as JSON.</p>
+            </div>
+          }
+        }
+      }
+
+      <!-- ═══════════════ slots ═══════════════ -->
+      @case ('slots') {
+        @if (exam(); as e) {
+          <section class="card slot-add">
+            <div class="field">
+              <label for="ss">Starts</label>
+              <input id="ss" class="input" type="datetime-local" [value]="slotStart()" (input)="slotStart.set($any($event.target).value)" />
+            </div>
+            <div class="field">
+              <label for="sc">Seats</label>
+              <input id="sc" class="input mono" type="number" min="1" [value]="slotCapacity()" (input)="slotCapacity.set(+$any($event.target).value)" />
+            </div>
+            <div class="field grow">
+              <label for="sl">Label <span class="faint">(optional)</span></label>
+              <input id="sl" class="input" [value]="slotLabel()" (input)="slotLabel.set($any($event.target).value)" placeholder="Morning shift" />
+            </div>
+            <button class="btn btn-primary" type="button" (click)="addSlot()" [disabled]="busy()">Add slot</button>
+          </section>
+          <p class="muted small tz-note">Times are entered in your browser's time zone and shown to candidates in IST.</p>
+
+          @if (e.slots.length) {
+            <div class="card table-wrap">
+              <table class="table">
+                <thead><tr><th>Starts (IST)</th><th>Ends</th><th>Entry closes</th><th>Label</th><th class="num">Booked</th><th></th></tr></thead>
+                <tbody>
+                  @for (s of e.slots; track s.id) {
+                    <tr>
+                      <td class="nowrap"><strong>{{ s.startsAt | ist }}</strong></td>
+                      <td class="nowrap muted">{{ slotEnd(s.startsAt) | ist: 'time' }}</td>
+                      <td class="nowrap muted">+{{ e.lateEntryMinutes }} min</td>
+                      <td>{{ s.label || '—' }}</td>
+                      <td class="num mono">{{ s.booked }} / {{ s.capacity }}</td>
+                      <td style="text-align: right">
+                        <button class="btn btn-quiet btn-sm danger" type="button" (click)="deleteSlot(s.id)" [disabled]="s.booked > 0 || busy()"
+                                [title]="s.booked > 0 ? 'Candidates are booked in this slot' : 'Remove slot'">Remove</button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          } @else {
+            <div class="card empty"><h3>No slots yet</h3><p>Candidates choose from the slots you add here. Add at least one before publishing.</p></div>
+          }
+        }
+      }
+
+      <!-- ═══════════════ analytics ═══════════════ -->
+      @case ('analytics') {
+        @if (analytics(); as a) {
+          <section class="kpis">
+            <div><span class="k">Registered</span><span class="v mono">{{ a.registered }}</span><span class="s">{{ a.absent }} absent</span></div>
+            <div><span class="k">Completed</span><span class="v mono">{{ a.submitted + a.autoSubmitted }}</span><span class="s">{{ a.autoSubmitted }} by timer · {{ a.inProgress }} live</span></div>
+            <div><span class="k">Terminated</span><span class="v mono">{{ a.terminated }}</span><span class="s">{{ pctOf(a.terminated, a.started) }}% of starts</span></div>
+            <div><span class="k">Average</span><span class="v mono">{{ a.average ?? '—' }}</span><span class="s">of {{ a.maxScore }} · median {{ a.median ?? '—' }}</span></div>
+            <div><span class="k">Range</span><span class="v mono">{{ a.lowest ?? '—' }}–{{ a.highest ?? '—' }}</span><span class="s">σ {{ a.stdDev ?? '—' }}</span></div>
+          </section>
+
+          <div class="an-grid">
+            <section class="card card-pad">
+              <h3>Score distribution</h3>
+              <p class="muted small an-sub">Completed attempts by percentage of maximum marks.</p>
+              <app-column-chart [data]="distribution()" ariaLabel="Score distribution" xTitle="Percent band" yTitle="Candidates"
+                                emptyText="No completed attempts yet." />
+              <p class="axis-note mono">% of max marks →</p>
+            </section>
+            <section class="card card-pad">
+              <h3>By subject</h3>
+              <p class="muted small an-sub">Average marks and accuracy on attempted questions.</p>
+              @for (s of a.subjects; track s.subject) {
+                <div class="hbar" [title]="s.averageScore + ' of ' + s.maxScore + ' on average'">
+                  <div class="hbar-top"><span>{{ s.subject }}</span><span class="mono">{{ s.averageScore }} / {{ s.maxScore }}</span></div>
+                  <div class="track"><i [style.width.%]="s.averagePercent < 0 ? 0 : s.averagePercent"></i></div>
+                  <div class="hbar-note">{{ s.averagePercent }}% of marks · {{ s.accuracy }}% accuracy</div>
+                </div>
+              } @empty { <p class="muted small">No data yet.</p> }
+            </section>
+          </div>
+
+          <section class="card table-wrap">
+            <div class="card-head"><h3>Question difficulty</h3><span class="muted small">Hardest first · rates are out of all completed attempts</span></div>
+            @if (hardest().length) {
+              <table class="table">
+                <thead><tr><th class="num">Q</th><th>Subject</th><th>Question</th><th class="num">Attempted</th><th style="width: 22%">Correct</th></tr></thead>
+                <tbody>
+                  @for (q of hardest(); track q.id) {
+                    <tr>
+                      <td class="num mono">{{ q.index }}</td>
+                      <td class="small nowrap">{{ q.subject }}</td>
+                      <td class="small">{{ q.excerpt }}</td>
+                      <td class="num mono">{{ q.attemptRate }}%</td>
+                      <td>
+                        <div class="rate"><div class="track"><i [style.width.%]="q.correctRate"></i></div><span class="mono">{{ q.correctRate }}%</span></div>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            } @else {
+              <div class="empty"><p>Per-question stats appear once candidates submit.</p></div>
+            }
+          </section>
+
+          @if (exam()?.mode !== 'OPEN') {
+            <section class="card table-wrap" style="margin-top: 20px">
+              <div class="card-head"><h3>Integrity events</h3></div>
+              @if (a.violations.length) {
+                <table class="table">
+                  <thead><tr><th>Event</th><th class="num">Total</th><th class="num">Counted as violation</th></tr></thead>
+                  <tbody>
+                    @for (v of a.violations; track v.type) {
+                      <tr><td>{{ v.label }}</td><td class="num mono">{{ v.total }}</td><td class="num mono">{{ v.counted }}</td></tr>
+                    }
+                  </tbody>
+                </table>
+              } @else {
+                <div class="empty"><p>No integrity events recorded.</p></div>
+              }
+            </section>
+          }
+        } @else {
+          <div class="skeleton" style="height: 320px"></div>
+        }
+      }
+
+      <!-- ═══════════════ candidates ═══════════════ -->
+      @case ('candidates') {
+        @if (candidates(); as rows) {
+          @if (rows.length) {
+            <div class="spread" style="margin-bottom: 12px">
+              <span class="muted small">{{ rows.length }} registration{{ rows.length === 1 ? '' : 's' }}</span>
+              <button class="btn btn-ghost btn-sm" type="button" (click)="exportCsv()">Export CSV</button>
+            </div>
+            <div class="card table-wrap">
+              <table class="table">
+                <thead><tr><th>Candidate</th><th>Hall ticket</th><th>Slot (IST)</th><th>Status</th><th class="num">Score</th><th class="num">Flags</th></tr></thead>
+                <tbody>
+                  @for (r of rows; track r.registrationId) {
+                    <tr>
+                      <td><div class="title">{{ r.candidateName }}</div><div class="muted small">{{ r.candidateEmail }}</div></td>
+                      <td class="mono small">{{ r.hallTicketNo }}</td>
+                      <td class="nowrap">{{ r.slotStartsAt | ist }}</td>
+                      <td>
+                        <span [class]="regBadge(r).cls">{{ regBadge(r).label }}</span>
+                        @if (r.terminationReason) { <div class="reason">{{ r.terminationReason }}</div> }
+                      </td>
+                      <td class="num mono">{{ r.score ?? '—' }}@if (r.maxScore !== undefined && r.score !== undefined) { <span class="muted"> / {{ r.maxScore }}</span> }</td>
+                      <td class="num mono" [class.flag]="(r.violationCount ?? 0) > 0">{{ r.violationCount ?? '—' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          } @else {
+            <div class="card empty"><h3>No registrations yet</h3><p>Once candidates register, you'll see their slots, status and scores here.</p></div>
+          }
+        } @else {
+          <div class="skeleton" style="height: 200px"></div>
+        }
+      }
+    }
+  }
+</div>
+
+<!-- import dialog -->
+@if (importOpen()) {
+  <div class="backdrop" role="dialog" aria-modal="true" aria-labelledby="imp-h">
+    <div class="dialog wide">
+      <h3 id="imp-h">Import questions</h3>
+      <p class="small">Paste a JSON array. <code>type</code> is SINGLE, MULTIPLE or NUMERIC. <code>correctAnswer</code> is the option index from 0 (comma-separated for MULTIPLE) or the numeric value.</p>
+      <textarea class="textarea mono json" rows="14" [value]="importText()" (input)="importText.set($any($event.target).value)" [placeholder]="sample" spellcheck="false"></textarea>
+      @if (importError()) { <div class="alert alert-danger" style="margin-top: 10px">{{ importError() }}</div> }
+      <div class="dialog-actions">
+        <button class="btn btn-quiet" type="button" (click)="importText.set(sample)">Insert example</button>
+        <span class="grow"></span>
+        <button class="btn btn-ghost" type="button" (click)="importOpen.set(false)">Cancel</button>
+        <button class="btn btn-primary" type="button" (click)="importQuestions()" [disabled]="busy() || !importText().trim()">Import</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- confirm dialog -->
+@if (confirm(); as c) {
+  <div class="backdrop" role="dialog" aria-modal="true" aria-labelledby="cf-h">
+    <div class="dialog">
+      <h3 id="cf-h">{{ c.title }}</h3>
+      <p>{{ c.body }}</p>
+      <div class="dialog-actions">
+        <button class="btn btn-ghost" type="button" (click)="confirm.set(null)">Cancel</button>
+        <button [class]="c.danger ? 'btn btn-danger' : 'btn btn-primary'" type="button" (click)="runConfirm()">{{ c.cta }}</button>
+      </div>
+    </div>
+  </div>
+}

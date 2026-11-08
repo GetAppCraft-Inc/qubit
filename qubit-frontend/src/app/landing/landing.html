@@ -1,0 +1,273 @@
+<header class="nav">
+  <div class="nav-inner">
+    <a routerLink="/" class="brand" aria-label="Qubit home"><app-logo [size]="26" /></a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#integrity">Integrity</a>
+      <a href="#institutes">For institutes</a>
+    </nav>
+    <div class="nav-cta">
+      @if (auth.isLoggedIn()) {
+        <a class="btn btn-primary btn-sm" [routerLink]="auth.homeRoute()">Open dashboard</a>
+      } @else {
+        <a class="btn btn-quiet btn-sm" routerLink="/login">Sign in</a>
+        <a class="btn btn-primary btn-sm" routerLink="/register">Create account</a>
+      }
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ───────────────────────── hero ───────────────────────── -->
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">Mock tests for JEE Main · JEE Advanced · NEET-UG</p>
+      <h1>The exam hall,<br /><span class="serif">without the hall.</span></h1>
+      <p class="lede">
+        Qubit runs full-length mock tests the way the real paper runs — one locked window, one attempt,
+        and a clock kept on our server, not your laptop. So the real day feels like the fiftieth time, not the first.
+      </p>
+      <div class="hero-actions">
+        @if (auth.isLoggedIn()) {
+          <a class="btn btn-primary btn-lg" [routerLink]="auth.homeRoute()">Go to your dashboard <span aria-hidden="true">→</span></a>
+        } @else {
+          <a class="btn btn-primary btn-lg" routerLink="/register">Create your account <span aria-hidden="true">→</span></a>
+          <a class="btn btn-ghost btn-lg" routerLink="/login">Sign in</a>
+        }
+      </div>
+      <dl class="facts">
+        <div><dt class="mono">1</dt><dd>attempt per hall ticket. No retakes, no peeking.</dd></div>
+        <div><dt class="mono">0 s</dt><dd>of extra time when your tab is somewhere else.</dd></div>
+        <div><dt class="mono">+4 −1</dt><dd>NTA-style marking, scored the moment you submit.</dd></div>
+      </dl>
+    </div>
+
+    <figure class="device" aria-label="Preview of the Qubit exam window">
+      <div class="win">
+        <div class="win-top">
+          <div class="row" style="gap:10px">
+            <img src="brand/qubit-mark.png" alt="" class="win-mark" />
+            <div>
+              <div class="win-title">JEE Main · Full Mock 07</div>
+              <div class="win-sub mono">QB26JM7K4PX2Q9 · Paper 1</div>
+            </div>
+          </div>
+          <div class="win-timer">
+            <span class="eyebrow">Time left</span>
+            <span class="mono">{{ timer() }}</span>
+          </div>
+        </div>
+
+        <div class="win-tabs">
+          <span class="on">Physics <em>14 / 25</em></span>
+          <span>Chemistry <em>0 / 25</em></span>
+          <span>Mathematics <em>0 / 25</em></span>
+        </div>
+
+        <div class="win-body">
+          <div class="win-q">
+            <div class="q-meta mono"><span>Question 14</span><span>Single correct · +4 / −1</span></div>
+            <p class="q-text">
+              A 2 kg block rests on a rough incline at 30°. With μ = 0.4 and g = 9.8 m/s², the least force along the
+              incline that will start moving it upward is closest to
+            </p>
+            <ul class="q-opts">
+              <li><b>A</b>14.2 N</li>
+              <li class="sel"><b>B</b>16.6 N</li>
+              <li><b>C</b>18.4 N</li>
+              <li><b>D</b>19.6 N</li>
+            </ul>
+            <div class="q-actions">
+              <span class="fake-btn ghost">Clear</span>
+              <span class="fake-btn ghost">Mark for review</span>
+              <span class="fake-btn solid">Save &amp; next</span>
+            </div>
+          </div>
+          <aside class="win-pal">
+            <div class="pal-label eyebrow">Physics</div>
+            <div class="pal-grid">
+              @for (c of palette; track $index) {
+                <span class="cell" [class]="'cell ' + c">{{ $index + 1 }}</span>
+              }
+            </div>
+            <ul class="pal-key">
+              <li><i class="cell answered"></i>Answered</li>
+              <li><i class="cell skipped"></i>Not answered</li>
+              <li><i class="cell review"></i>For review</li>
+            </ul>
+          </aside>
+        </div>
+
+        <div class="win-foot mono">
+          <span><i class="dot dot-live"></i> Proctoring on</span>
+          <span>Full screen</span>
+          <span>Warnings 0 / 1</span>
+          <span class="saved">Saved 2 s ago</span>
+        </div>
+      </div>
+    </figure>
+  </section>
+
+  <!-- ───────────────────────── formats ───────────────────────── -->
+  <section class="formats" aria-labelledby="formats-h">
+    <div class="section-inner">
+      <div class="section-head">
+        <p class="eyebrow">Formats</p>
+        <h2 id="formats-h">Built around the papers you're actually sitting.</h2>
+      </div>
+      <div class="ftable" role="table">
+        <div class="frow fhead" role="row">
+          <span role="columnheader">Exam</span>
+          <span role="columnheader">Duration</span>
+          <span role="columnheader">Questions</span>
+          <span role="columnheader">Marking</span>
+          <span role="columnheader" class="hide-sm">Sections</span>
+        </div>
+        @for (f of formats; track f.name) {
+          <div class="frow" role="row">
+            <span role="cell"><strong>{{ f.name }}</strong><small>{{ f.paper }}</small></span>
+            <span role="cell" class="mono">{{ f.duration }}</span>
+            <span role="cell" class="mono">{{ f.questions }}</span>
+            <span role="cell" class="mono">{{ f.marking }}</span>
+            <span role="cell" class="hide-sm muted">{{ f.subjects }}</span>
+          </div>
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── how ───────────────────────── -->
+  <section id="how" class="how" aria-labelledby="how-h">
+    <div class="section-inner">
+      <div class="section-head">
+        <p class="eyebrow">How it works</p>
+        <h2 id="how-h">From sign-up to submit in four steps.</h2>
+      </div>
+      <ol class="steps">
+        <li>
+          <span class="num mono">01</span>
+          <h3>Register</h3>
+          <p>Email and a password. Confirm your address from the link we send, and you're in.</p>
+        </li>
+        <li>
+          <span class="num mono">02</span>
+          <h3>Pick a slot</h3>
+          <p>Every mock runs in scheduled slots. Choose one that fits your week — and reschedule any time before it starts.</p>
+        </li>
+        <li>
+          <span class="num mono">03</span>
+          <h3>Print your hall ticket</h3>
+          <p>A unique number and barcode, ready the moment you register. Invigilators can look it up in a second.</p>
+        </li>
+        <li>
+          <span class="num mono">04</span>
+          <h3>Sit the paper</h3>
+          <p>Full screen, one attempt, server-timed. Submit when you're done, or the clock submits for you.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── integrity ───────────────────────── -->
+  <section id="integrity" class="integrity" aria-labelledby="int-h">
+    <div class="section-inner int-grid">
+      <div class="int-copy">
+        <p class="eyebrow inv">Integrity</p>
+        <h2 id="int-h">If something's off, <span class="serif">the paper closes.</span></h2>
+        <p>
+          Qubit watches the exam window. Leave it — switch tabs, minimise, drop out of full screen, open developer
+          tools — and the attempt is flagged on the spot. Go past the exam's tolerance and it ends, with the reason on
+          record for the invigilator.
+        </p>
+        <ul class="watch">
+          <li>Tab switches &amp; minimising</li>
+          <li>Window focus loss</li>
+          <li>Leaving full screen</li>
+          <li>A second display</li>
+          <li>Developer tools</li>
+          <li>Copy, paste &amp; right-click</li>
+          <li>Reopening in another tab or device</li>
+          <li>Going offline for more than 45 s</li>
+        </ul>
+        <p class="footnote">
+          A browser can't see the rest of the room. For high-stakes papers, pair Qubit with a supervised centre — the
+          hall-ticket barcode is there for exactly that.
+        </p>
+      </div>
+
+      <div class="console" aria-label="Example proctoring log">
+        <div class="console-head mono">
+          <span><i class="dot dot-live"></i> Live · JEE Main Mock 07</span>
+          <span>Slot 10:00 IST</span>
+        </div>
+        <ul class="console-body mono">
+          @for (l of log; track $index) {
+            <li [class]="l.tone">
+              <span class="t">{{ l.t }}</span>
+              <span class="who">{{ l.ticket }}</span>
+              <span class="what">{{ l.what }}</span>
+              <span class="tag">{{ l.tag }}</span>
+            </li>
+          }
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── institutes ───────────────────────── -->
+  <section id="institutes" class="inst" aria-labelledby="inst-h">
+    <div class="section-inner">
+      <div class="section-head">
+        <p class="eyebrow">For coaching institutes</p>
+        <h2 id="inst-h">Set the paper. Run the slots. Watch it live.</h2>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Question bank</h3>
+          <p>Single-correct, multi-correct and numeric-answer questions with per-question marking. Paste a batch as JSON when you're moving an existing paper over.</p>
+        </div>
+        <div>
+          <h3>Slots &amp; seats</h3>
+          <p>Schedule as many sittings as you need, cap each one, and set a late-entry window. Candidates choose; you see who's where.</p>
+        </div>
+        <div>
+          <h3>Live monitor</h3>
+          <p>Every running attempt on one screen — who's online, how much time is left, every flag as it happens. End an attempt with a reason in two clicks.</p>
+        </div>
+      </div>
+      <div class="cols cols-2">
+        <div>
+          <h3>Results that teach</h3>
+          <p>Students get rank, percentile, subject-wise accuracy and a question-by-question review once every slot has closed. Staff get score distributions and the questions that tripped most people up.</p>
+        </div>
+        <div>
+          <h3>Open quizzes &amp; webhooks</h3>
+          <p>Not every test needs a lockdown. Run homework and practice as open quizzes, and push every finished attempt to your own systems with signed webhooks.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── cta ───────────────────────── -->
+  <section class="cta">
+    <div class="section-inner cta-inner">
+      <h2>Your next mock is <span class="serif">one slot away.</span></h2>
+      @if (auth.isLoggedIn()) {
+        <a class="btn btn-brand btn-lg" [routerLink]="auth.homeRoute()">Browse assessments <span aria-hidden="true">→</span></a>
+      } @else {
+        <a class="btn btn-brand btn-lg" routerLink="/register">Create a free account <span aria-hidden="true">→</span></a>
+      }
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="section-inner foot-inner">
+    <app-logo [size]="22" />
+    <span class="muted small">© {{ year }} Qubit. Timed, proctored assessments.</span>
+    <nav class="row small">
+      <a routerLink="/login">Sign in</a>
+      <a routerLink="/register">Register</a>
+    </nav>
+  </div>
+</footer>

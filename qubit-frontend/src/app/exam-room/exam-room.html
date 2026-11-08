@@ -1,0 +1,365 @@
+@switch (phase()) {
+
+  <!-- ═════════════════════════ loading / error ═════════════════════════ -->
+  @case ('loading') {
+    <div class="center"><span class="spinner"></span></div>
+  }
+  @case ('error') {
+    <div class="center">
+      <div class="card card-pad narrow">
+        <h2>Can't open this exam</h2>
+        <p class="muted" style="margin: 8px 0 18px">{{ error() }}</p>
+        <a routerLink="/app" class="btn btn-primary">Back to dashboard</a>
+      </div>
+    </div>
+  }
+
+  <!-- ═════════════════════════ lobby ═════════════════════════ -->
+  @case ('lobby') {
+    <ng-container *ngTemplateOutlet="lobby" />
+  }
+  @case ('starting') {
+    <ng-container *ngTemplateOutlet="lobby" />
+  }
+
+  <!-- ═════════════════════════ running ═════════════════════════ -->
+  @case ('running') {
+    @if (paper(); as p) {
+      <div class="room">
+        <header class="r-top">
+          <div class="r-id">
+            <img src="brand/qubit-mark.png" alt="" class="r-mark" />
+            <div class="r-id-text">
+              <strong>{{ p.examTitle }}</strong>
+              <span class="mono">{{ p.hallTicketNo }} · {{ p.candidateName }}</span>
+            </div>
+          </div>
+
+          <div class="r-signals mono">
+            <span class="sig" [class.bad]="wsState() !== 'live'">
+              <i class="dot" [class.dot-live]="wsState() === 'live'"></i>
+              {{ wsState() === 'live' ? (isOpen() ? 'Connected' : 'Proctoring on') : wsState() === 'connecting' ? 'Connecting…' : 'Reconnecting…' }}
+            </span>
+            @if (isOpen()) {
+              <span class="sig">Open quiz</span>
+            } @else {
+              <span class="sig" [class.bad]="violationCount() > 0">Warnings {{ violationCount() }} / {{ tolerance() }}</span>
+            }
+            <span class="sig save">
+              @if (saveFailed()) { <span class="bad-text">Not saved — retrying</span> }
+              @else if (saving() > 0) { Saving… }
+              @else if (savedAt()) { Saved }
+            </span>
+          </div>
+
+          <div class="r-timer" [class]="'r-timer ' + timerTone()" role="timer" aria-live="off">
+            <span class="eyebrow">Time left</span>
+            <span class="mono">{{ timerText() }}</span>
+          </div>
+
+          <button class="btn btn-primary" type="button" (click)="openSubmit()">Submit</button>
+        </header>
+
+        <nav class="r-subjects" aria-label="Sections">
+          @for (s of subjectProgress(); track s.subject) {
+            <button type="button" [class.on]="q()?.subject === s.subject" (click)="goTo(s.first)">
+              {{ s.subject }} <em class="mono">{{ s.answered }}/{{ s.total }}</em>
+            </button>
+          }
+        </nav>
+
+        <div class="r-main">
+          <section class="r-q" [style.background-image]="watermark()">
+            @if (q(); as cq) {
+              <div class="q-head mono">
+                <span>Question {{ cq.index }} <span class="faint">of {{ counts().total }}</span>@if (cq.section) { <span class="faint"> · {{ cq.section }}</span> }</span>
+                <span>{{ typeLabel(cq) }} · +{{ cq.marks }} / −{{ cq.negativeMarks }}</span>
+              </div>
+              <div class="q-text"><app-math [text]="cq.text" /></div>
+              @if (cq.imageUrl) {
+                <figure class="q-fig"><img [src]="cq.imageUrl" alt="Figure for question {{ cq.index }}" draggable="false" /></figure>
+              }
+
+              @if (cq.type === 'NUMERIC') {
+                <div class="numeric">
+                  <label for="num" class="label">Your answer</label>
+                  <input id="num" class="input mono" inputmode="decimal" autocomplete="off" spellcheck="false"
+                         data-numeric="true" [value]="numericDraft()" (input)="onNumericInput($any($event.target).value)"
+                         (blur)="onNumericBlur()" placeholder="Enter a number" />
+                  <span class="hint">Numbers only. Decimals and negatives allowed.</span>
+                </div>
+              } @else {
+                @if (cq.type === 'MULTIPLE') {
+                  <p class="multi-hint">Select all options that are correct.@if (cq.partialMarking) { Partial marks apply if every option you pick is correct. }</p>
+                }
+                <ul class="opts" role="listbox" [attr.aria-multiselectable]="cq.type === 'MULTIPLE'">
+                  @for (o of cq.options; track $index) {
+                    <li>
+                      <button type="button" class="opt" role="option" [attr.aria-selected]="isSelected($index)"
+                              [class.on]="isSelected($index)" [class.multi]="cq.type === 'MULTIPLE'" (click)="selectOption($index)">
+                        <span class="key mono">{{ letter($index) }}</span>
+                        <span class="txt"><app-math [text]="o" /></span>
+                      </button>
+                    </li>
+                  }
+                </ul>
+              }
+            }
+          </section>
+
+          <aside class="r-pal" aria-label="Question palette">
+            <dl class="tally">
+              <div><dt>Answered</dt><dd class="ok">{{ counts().answered }}</dd></div>
+              <div><dt>Not answered</dt><dd class="bad">{{ counts().skipped }}</dd></div>
+              <div><dt>For review</dt><dd class="brand">{{ counts().review }}</dd></div>
+              <div><dt>Not visited</dt><dd>{{ counts().fresh }}</dd></div>
+            </dl>
+            <p class="eyebrow pal-sub">{{ q()?.subject }}</p>
+            <div class="grid">
+              @for (x of subjectQuestions(); track x.id) {
+                <button type="button" [class]="'cell ' + cell(x.id)" [class.current]="x.id === q()?.id" (click)="goToQuestion(x.id)">
+                  {{ x.index }}
+                </button>
+              }
+            </div>
+            <ul class="legend">
+              <li><i class="cell answered"></i>Answered</li>
+              <li><i class="cell skipped"></i>Not answered</li>
+              <li><i class="cell review"></i>Marked for review</li>
+              <li><i class="cell answered-review"></i>Answered &amp; marked</li>
+              <li><i class="cell fresh"></i>Not visited</li>
+            </ul>
+          </aside>
+        </div>
+
+        <footer class="r-actions">
+          <div class="row">
+            <button class="btn btn-ghost" type="button" (click)="clearResponse()">Clear response</button>
+            <button class="btn btn-ghost" type="button" (click)="markAndNext()">
+              {{ answers()[q()?.id ?? -1]?.marked ? 'Unmark' : 'Mark for review' }} &amp; next
+            </button>
+          </div>
+          <div class="row">
+            <button class="btn btn-ghost" type="button" (click)="goTo(current() - 1)" [disabled]="current() === 0">← Previous</button>
+            <button class="btn btn-primary" type="button" (click)="saveAndNext()" [disabled]="current() === questions().length - 1">Save &amp; next →</button>
+          </div>
+        </footer>
+      </div>
+
+      @if (underReview()) {
+        <div class="review-strip" role="status"><span class="pulse"></span>Your attempt is flagged for review. An invigilator has been notified. Keep writing.</div>
+      }
+      @if (notice()) {
+        <div class="review-strip ok" role="status">{{ notice() }}</div>
+      }
+
+      <!-- must stay in full screen -->
+      @if (!isFullscreen() && !warning() && !isOpen()) {
+        <div class="lock">
+          <div class="lock-card">
+            <p class="eyebrow">Paused view</p>
+            <h2>Return to full screen</h2>
+            <p>The exam only runs in full screen. Your timer is still running on the server.</p>
+            <button class="btn btn-brand btn-lg" type="button" (click)="returnToFullscreen()">Return to full screen</button>
+          </div>
+        </div>
+      }
+
+      <!-- integrity warning -->
+      @if (warning(); as w) {
+        <div class="backdrop" role="alertdialog" aria-modal="true" aria-labelledby="warn-h">
+          <div class="dialog warn">
+            <p class="eyebrow">Warning {{ w.count }} of {{ w.tolerance }}</p>
+            <h3 id="warn-h">{{ w.label }}</h3>
+            @if (w.flagged) {
+              <p>You've gone past the warning limit for this exam. <strong>An invigilator has been alerted</strong> and will decide whether
+                your attempt continues. Keep writing in full screen; if the attempt is cancelled you'll be able to appeal.</p>
+            } @else {
+              <p>This has been recorded and is visible to your invigilator.
+                @if (w.count >= w.tolerance) { <strong>One more violation goes past the limit.</strong> }
+              </p>
+            }
+            <div class="dialog-actions">
+              <button class="btn btn-primary" type="button" (click)="dismissWarning()">Return to exam</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- submit confirmation -->
+      @if (confirmOpen()) {
+        <div class="backdrop" role="dialog" aria-modal="true" aria-labelledby="sub-h">
+          <div class="dialog">
+            <h3 id="sub-h">Submit your exam?</h3>
+            <p>You can't return to the paper after submitting. Time left: <strong class="mono">{{ timerText() }}</strong></p>
+            <dl class="sum">
+              <div><dt>Answered</dt><dd>{{ counts().answered }}</dd></div>
+              <div><dt>Not answered</dt><dd>{{ counts().skipped + counts().fresh }}</dd></div>
+              <div><dt>Marked for review</dt><dd>{{ counts().review }}</dd></div>
+            </dl>
+            @if (error()) { <div class="alert alert-danger" style="margin-top: 14px">{{ error() }}</div> }
+            <div class="dialog-actions">
+              <button class="btn btn-ghost" type="button" (click)="confirmOpen.set(false)" [disabled]="submitting()">Keep working</button>
+              <button class="btn btn-primary" type="button" (click)="submit()" [disabled]="submitting()">
+                @if (submitting()) { <span class="spinner"></span> } Submit now
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+    }
+  }
+
+  <!-- ═════════════════════════ ended ═════════════════════════ -->
+  @case ('ended') {
+    @if (ended(); as e) {
+      <div class="center">
+        <div class="end" [class.bad]="e.kind === 'TERMINATED' || e.kind === 'SUPERSEDED'">
+          <app-logo [size]="26" />
+          <div class="end-icon" aria-hidden="true">
+            @if (e.kind === 'TERMINATED' || e.kind === 'SUPERSEDED') {
+              <svg viewBox="0 0 48 48" width="48" height="48"><circle cx="24" cy="24" r="21" fill="none" stroke="currentColor" stroke-width="2"/><path d="m17 17 14 14M31 17 17 31" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+            } @else {
+              <svg viewBox="0 0 48 48" width="48" height="48"><circle cx="24" cy="24" r="21" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15 25 6 6 12-13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            }
+          </div>
+          <h1>{{ endTitle(e.kind) }}</h1>
+          <p class="end-msg">
+            @switch (e.kind) {
+              @case ('SUBMITTED') { Your responses are recorded. You can close this window. }
+              @case ('AUTO_SUBMITTED') { The clock ran out, so we submitted your paper with everything you'd saved. }
+              @case ('TERMINATED') { {{ e.reason || 'Cheating was detected and the attempt was closed.' }} }
+              @case ('SUPERSEDED') { {{ e.reason || 'The exam was opened somewhere else, so this window has been closed.' }} }
+            }
+          </p>
+
+          @if (reg()?.attempt; as a) {
+            @if (a.resultsVisible && a.status !== 'TERMINATED') {
+              <div class="end-score">
+                <span class="eyebrow">Score</span>
+                <span class="mono big">{{ a.score }}<small> / {{ a.maxScore }}</small></span>
+                <span class="muted small">{{ a.correctCount }} correct · {{ a.incorrectCount }} incorrect · {{ a.unansweredCount }} unanswered</span>
+              </div>
+            }
+            <p class="muted small">Hall ticket <span class="mono">{{ reg()?.hallTicketNo }}</span> · ended {{ a.finishedAt | ist }}</p>
+          }
+          @if (e.kind === 'TERMINATED' && reg(); as r) {
+            @if (r.canAppeal || r.appeal || r.retakeUntil) {
+              <app-appeal-box class="end-appeal" [registration]="r" (changed)="refreshReg()" />
+            }
+          }
+
+          <div class="row" style="justify-content: center; margin-top: 22px">
+            <button class="btn btn-primary" type="button" (click)="backToDashboard()">Back to dashboard</button>
+            @if (reg()?.attempt?.resultsVisible) {
+              <a class="btn btn-ghost" [routerLink]="['/app/results', reg()!.id]">Score report</a>
+            } @else if (reg()) {
+              <a class="btn btn-ghost" [routerLink]="['/app/registrations', reg()!.id]">Hall ticket</a>
+            }
+          </div>
+        </div>
+      </div>
+    }
+  }
+}
+
+<!-- ═════════════════════════ lobby template ═════════════════════════ -->
+<ng-template #lobby>
+  @if (reg(); as r) {
+    <div class="lobby">
+      <header class="l-top">
+        <app-logo [size]="26" />
+        <a routerLink="/app" class="btn btn-quiet btn-sm">Leave</a>
+      </header>
+
+      <div class="l-grid">
+        <section class="l-info">
+          <p class="eyebrow">Exam hall</p>
+          <h1>{{ r.exam.title }}</h1>
+          <dl class="l-facts">
+            <div><dt>Candidate</dt><dd>{{ r.candidateName }}</dd></div>
+            <div><dt>Hall ticket</dt><dd class="mono">{{ r.hallTicketNo }}</dd></div>
+            <div><dt>Slot</dt><dd>{{ r.slot.startsAt | ist }}</dd></div>
+            <div><dt>Duration</dt><dd>{{ r.exam.durationMinutes | duration }}</dd></div>
+            <div><dt>Questions</dt><dd>{{ r.exam.questionCount }} · {{ r.exam.totalMarks }} marks</dd></div>
+            <div><dt>Warnings allowed</dt><dd>{{ r.exam.violationTolerance === 0 ? 'None' : r.exam.violationTolerance }}</dd></div>
+          </dl>
+
+          @if (!isOpen()) {
+          <h3 class="l-h">System check</h3>
+          <ul class="checks">
+            <li [class.fail]="!checks().fullscreen"><i></i>Full-screen support <span>{{ checks().fullscreen ? 'Ready' : 'Not supported' }}</span></li>
+            <li [class.fail]="checks().singleScreen === false" [class.unknown]="checks().singleScreen === 'unknown'">
+              <i></i>Single display
+              <span>{{ checks().singleScreen === 'unknown' ? 'Can’t verify in this browser' : checks().singleScreen ? 'One display' : 'Disconnect extra displays' }}</span>
+            </li>
+            <li [class.fail]="!checks().devtools"><i></i>Developer tools <span>{{ checks().devtools ? 'Closed' : 'Close them to begin' }}</span></li>
+            <li [class.fail]="!checks().online"><i></i>Internet connection <span>{{ checks().online ? 'Online' : 'Offline' }}</span></li>
+          </ul>
+          }
+        </section>
+
+        <section class="l-start card">
+          @if (isOpen()) {
+          <h3>Before you start</h3>
+          <ol class="rules">
+            <li>This is an open quiz — no full screen or proctoring.</li>
+            <li>You get one attempt. The {{ r.exam.durationMinutes }}-minute timer starts as soon as you begin and keeps running if you leave.</li>
+            <li>Answers save automatically. Submit when you're done.</li>
+          </ol>
+          } @else {
+          <h3>Rules for this sitting</h3>
+          <ol class="rules">
+            <li>The paper opens in full screen and must stay that way until you submit.</li>
+            <li>Switching tabs or apps, minimising, leaving full screen, opening developer tools or connecting a second display is a violation.
+              @if (r.exam.violationTolerance === 0) { <strong>The first violation ends your exam.</strong> }
+              @else { After {{ r.exam.violationTolerance }} warning{{ r.exam.violationTolerance > 1 ? 's' : '' }}, the next violation ends your exam. }
+            </li>
+            <li>Copy, paste, right-click and keyboard shortcuts are disabled.</li>
+            <li>You get one attempt. Opening the exam in another tab or device counts as a violation.</li>
+            <li>Answers save automatically. The timer runs on our server and the paper submits itself at zero.</li>
+          </ol>
+          @if (r.exam.instructions) {
+            <details class="instr">
+              <summary>Exam instructions</summary>
+              <p>{{ r.exam.instructions }}</p>
+            </details>
+          }
+
+          <label class="check agree">
+            <input type="checkbox" [checked]="agree()" (change)="agree.set($any($event.target).checked)" />
+            <span>I've read the rules and I'm ready to begin. I understand a violation can end my attempt.</span>
+          </label>
+          }
+
+          @if (error()) { <div class="alert alert-danger">{{ error() }}</div> }
+
+          @switch (entry().state) {
+            @case ('early') {
+              <button class="btn btn-primary btn-lg btn-block" disabled>Opens {{ entry().label }}</button>
+              <p class="muted small center-text">This page will unlock automatically at {{ r.entryOpensAt | ist: 'time' }} IST.</p>
+            }
+            @case ('closed') {
+              <div class="alert alert-warn">The entry window for your slot closed at {{ r.entryClosesAt | ist: 'time' }} IST.</div>
+            }
+            @default {
+              <button class="btn btn-brand btn-lg btn-block" type="button" [disabled]="!canStart() || phase() === 'starting'" (click)="start()">
+                @if (phase() === 'starting') { <span class="spinner"></span> Opening paper… }
+                @else if (isOpen()) { {{ entry().state === 'resume' ? 'Resume quiz' : 'Start quiz' }} }
+                @else if (entry().state === 'resume') { Resume exam in full screen }
+                @else { Begin exam in full screen }
+              </button>
+              @if (isOpen()) {
+                <p class="muted small center-text">One attempt · answers save as you go.</p>
+              } @else if (entry().state === 'open') {
+                <p class="muted small center-text">Entry closes {{ entry().label }}.</p>
+              } @else {
+                <p class="muted small center-text">Resuming in this tab continues your attempt. Opening it anywhere else counts as a violation.</p>
+              }
+            }
+          }
+        </section>
+      </div>
+    </div>
+  }
+</ng-template>
