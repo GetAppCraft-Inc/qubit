@@ -43,12 +43,14 @@ public class AttemptService {
     private final ProctorHub hub;
     private final WebhookService webhooks;
     private final com.tanmaysinghx.qubit.exam.QuestionImages images;
+    private final com.tanmaysinghx.qubit.integrity.CaseRecorder caseRecorder;
 
     // ------------------------------------------------------------------ start / resume
 
     @Transactional
     public PaperDto start(Long registrationId, Long userId, String clientSessionId, String ip, String userAgent) {
-        Registration r = registrations.findById(registrationId)
+        // Row lock: two tabs pressing "Begin" at once can't create two attempts.
+        Registration r = registrations.lockById(registrationId)
                 .filter(x -> x.getUser().getId().equals(userId))
                 .orElseThrow(() -> ApiException.notFound("Registration not found"));
         Exam exam = r.getExam();
@@ -75,9 +77,12 @@ public class AttemptService {
         }
 
         if (r.getStatus() == RegistrationStatus.CANCELLED) throw ApiException.badRequest("This registration was cancelled");
-        if (exam.getStatus() != ExamStatus.PUBLISHED) throw ApiException.badRequest("This exam is not open");
-        Instant opens = CandidateService.entryOpens(exam, r.getSlot());
-        Instant closes = CandidateService.entryCloses(exam, r.getSlot());
+        boolean retake = r.getRetakeUntil() != null && now.isBefore(r.getRetakeUntil());
+        if (exam.getStatus() != ExamStatus.PUBLISHED && !(retake && exam.getStatus() == ExamStatus.CLOSED)) {
+            throw ApiException.badRequest("This exam is not open");
+        }
+        Instant opens = retake ? now.minusSeconds(1) : CandidateService.entryOpens(exam, r.getSlot());
+        Instant closes = retake ? r.getRetakeUntil() : CandidateService.entryCloses(exam, r.getSlot());
         if (now.isBefore(opens)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "NOT_YET_OPEN",
                     exam.isOpenMode() ? "This assessment isn't open yet" : "Your slot hasn't started yet");
@@ -101,6 +106,7 @@ public class AttemptService {
             throw new ApiException(HttpStatus.CONFLICT, "ALREADY_ATTEMPTED", "This exam has already been started");
         }
         r.setStatus(RegistrationStatus.IN_PROGRESS);
+        r.setRetakeUntil(null);
         hub.broadcast(attemptPayload("ATTEMPT_STARTED", a));
         return paper(a, now, false);
     }
@@ -166,11 +172,11 @@ public class AttemptService {
         int tolerance = a.getRegistration().getExam().getViolationTolerance();
         if (a.getStatus().isFinished()) {
             return new ViolationOutcome(false, a.getStatus() == AttemptStatus.TERMINATED, a.getViolationCount(),
-                    tolerance, type.label(), a.getTerminationReason());
+                    tolerance, type.label(), a.getTerminationReason(), false);
         }
         // Open (low-stakes) assessments don't enforce integrity; only invigilators can end them.
         if (a.getRegistration().getExam().isOpenMode() && type != ViolationType.ADMIN_TERMINATED) {
-            return new ViolationOutcome(false, false, a.getViolationCount(), tolerance, type.label(), null);
+            return new ViolationOutcome(false, false, a.getViolationCount(), tolerance, type.label(), null, false);
         }
         return applyViolation(a, type, detail, Instant.now());
     }
@@ -239,15 +245,59 @@ public class AttemptService {
         payload.put("detail", detail);
         hub.broadcast(payload);
 
-        boolean terminate = type == ViolationType.ADMIN_TERMINATED || (counted && a.getViolationCount() > tolerance);
-        String reason = null;
-        if (terminate) {
-            reason = type == ViolationType.ADMIN_TERMINATED && detail != null && !detail.isBlank()
-                    ? "Terminated by invigilator: " + detail
-                    : "Cheating detected — " + type.label().toLowerCase(Locale.ROOT);
+        if (type == ViolationType.ADMIN_TERMINATED) {
+            String reason = detail != null && !detail.isBlank()
+                    ? "Cancelled by invigilator: " + detail
+                    : "Cancelled by invigilator";
             finish(a, AttemptStatus.TERMINATED, reason);
+            return new ViolationOutcome(counted, true, a.getViolationCount(), tolerance, type.label(), reason, false);
         }
-        return new ViolationOutcome(counted, terminate, a.getViolationCount(), tolerance, type.label(), reason);
+
+        if (!(counted && a.getViolationCount() > tolerance)) {
+            return new ViolationOutcome(counted, false, a.getViolationCount(), tolerance, type.label(), null, false);
+        }
+
+        String reason = "Cheating detected — " + type.label().toLowerCase(Locale.ROOT);
+        if (a.getRegistration().getExam().effectiveIntegrityAction() == IntegrityAction.TERMINATE) {
+            finish(a, AttemptStatus.TERMINATED, reason);
+            caseRecorder.autoTerminated(a, reason);
+            return new ViolationOutcome(true, true, a.getViolationCount(), tolerance, type.label(), reason, false);
+        }
+        // REVIEW: the candidate keeps writing; an invigilator decides whether to cancel.
+        caseRecorder.flag(a, type.label() + (detail == null || detail.isBlank() ? "" : " — " + detail));
+        return new ViolationOutcome(true, false, a.getViolationCount(), tolerance, type.label(), null, true);
+    }
+
+    /**
+     * Invigilator cancels an attempt. Works while it is running (ends it now) and after it was
+     * submitted (the result is withdrawn). Returns false if it was already terminated.
+     */
+    @Transactional
+    public boolean cancel(Long attemptId, String reason) {
+        Attempt a = attempts.lockById(attemptId).orElseThrow(() -> ApiException.notFound("Attempt not found"));
+        if (a.getStatus() == AttemptStatus.TERMINATED) return false;
+        String why = reason == null || reason.isBlank() ? "Cancelled by invigilator" : "Cancelled by invigilator: " + reason.trim();
+        why = truncate(why, 255);
+        if (a.getStatus() == AttemptStatus.IN_PROGRESS) {
+            ProctorEvent ev = new ProctorEvent();
+            ev.setAttempt(a);
+            ev.setType(ViolationType.ADMIN_TERMINATED);
+            ev.setCounted(false);
+            ev.setDetail(truncate(reason, 255));
+            events.save(ev);
+            finish(a, AttemptStatus.TERMINATED, why);
+        } else {
+            a.setStatus(AttemptStatus.TERMINATED);
+            a.setTerminationReason(why);
+            a.getRegistration().setStatus(RegistrationStatus.TERMINATED);
+            Map<String, Object> payload = attemptPayload("ATTEMPT_ENDED", a);
+            payload.put("status", AttemptStatus.TERMINATED.name());
+            payload.put("reason", why);
+            hub.broadcast(payload);
+            webhooks.attemptFinished(a);
+            log.info("Finished attempt {} withdrawn: {}", a.getId(), why);
+        }
+        return true;
     }
 
     private void finish(Attempt a, AttemptStatus status, String reason) {

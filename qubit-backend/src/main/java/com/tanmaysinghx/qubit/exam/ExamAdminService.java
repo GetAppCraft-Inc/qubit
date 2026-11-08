@@ -194,6 +194,7 @@ public class ExamAdminService {
         exam.setDurationMinutes(req.durationMinutes());
         exam.setLateEntryMinutes(req.lateEntryMinutes());
         exam.setViolationTolerance(req.violationTolerance());
+        if (req.integrityAction() != null) exam.setIntegrityAction(req.integrityAction());
         exam.setShowResults(req.showResults());
         exam.setRegistrationOpensAt(req.registrationOpensAt());
         exam.setRegistrationClosesAt(req.registrationClosesAt());
@@ -319,7 +320,7 @@ public class ExamAdminService {
                 .map(q -> QuestionAdminDto.of(q, images.url(q, java.time.Duration.ofHours(6)))).toList();
         return new ExamDetailDto(e.getId(), e.getCode(), e.getTitle(), e.getDescription(), e.getInstructions(), e.getCategory(),
                 e.getStatus(), e.effectiveMode(), e.getWebhookUrl(), e.getWebhookSecret(),
-                e.getDurationMinutes(), e.getLateEntryMinutes(), e.getViolationTolerance(), e.isShowResults(),
+                e.getDurationMinutes(), e.getLateEntryMinutes(), e.getViolationTolerance(), e.effectiveIntegrityAction(), e.isShowResults(),
                 e.getRegistrationOpensAt(), e.getRegistrationClosesAt(), e.totalMarks(),
                 e.getId() == null ? 0 : registrations.countByExamIdAndStatusNot(e.getId(), RegistrationStatus.CANCELLED),
                 e.getId() != null && isLocked(e), slotDtos, qs);

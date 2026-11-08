@@ -84,6 +84,15 @@ public class Exam {
     @OrderBy("position ASC, id ASC")
     private List<Question> questions = new ArrayList<>();
 
+    /** What happens when a candidate goes past the violation tolerance. Null = REVIEW (invigilator decides). */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private IntegrityAction integrityAction;
+
+    public IntegrityAction effectiveIntegrityAction() {
+        return integrityAction == null ? IntegrityAction.REVIEW : integrityAction;
+    }
+
     public ExamMode effectiveMode() {
         return mode == null ? ExamMode.PROCTORED : mode;
     }

@@ -15,6 +15,11 @@ public interface RegistrationRepository extends JpaRepository<Registration, Long
 
     Optional<Registration> findByUserIdAndExamId(Long userId, Long examId);
 
+    /** Serialises attempt starts for one registration (replaces the old unique index guarantee). */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from Registration r where r.id = :id")
+    Optional<Registration> lockById(Long id);
+
     Optional<Registration> findByHallTicketNo(String hallTicketNo);
 
     boolean existsByHallTicketNo(String hallTicketNo);

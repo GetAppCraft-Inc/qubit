@@ -21,7 +21,8 @@ public final class ExamDtos {
             Instant registrationOpensAt,
             Instant registrationClosesAt,
             ExamMode mode,
-            @Size(max = 500) String webhookUrl) {}
+            @Size(max = 500) String webhookUrl,
+            IntegrityAction integrityAction) {}
 
     public record SlotRequest(@NotNull Instant startsAt, @Min(1) @Max(100000) int capacity, @Size(max = 80) String label) {}
 
@@ -60,7 +61,7 @@ public final class ExamDtos {
     public record ExamDetailDto(Long id, String code, String title, String description, String instructions,
                                 ExamCategory category, ExamStatus status, ExamMode mode, String webhookUrl,
                                 String webhookSecret, int durationMinutes, int lateEntryMinutes,
-                                int violationTolerance, boolean showResults, Instant registrationOpensAt,
+                                int violationTolerance, IntegrityAction integrityAction, boolean showResults, Instant registrationOpensAt,
                                 Instant registrationClosesAt, int totalMarks, long registrationCount, boolean locked,
                                 List<SlotDto> slots, List<QuestionAdminDto> questions) {}
 }

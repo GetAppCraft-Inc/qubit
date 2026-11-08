@@ -30,6 +30,7 @@ public class CandidateService {
     private final AttemptRepository attempts;
     private final CurrentUser currentUser;
     private final MailService mail;
+    private final com.tanmaysinghx.qubit.integrity.AppealRepository appeals;
 
     @Transactional(readOnly = true)
     public List<PublicExamDto> listExams() {
@@ -168,13 +169,20 @@ public class CandidateService {
                     visible ? a.getCorrectCount() : null, visible ? a.getIncorrectCount() : null,
                     visible ? a.getUnansweredCount() : null, a.getTerminationReason(), visible);
         }
+        var appeal = appeals.findFirstByAttemptRegistrationIdOrderByCreatedAtDesc(r.getId()).orElse(null);
+        boolean canAppeal = a != null && a.getStatus() == com.tanmaysinghx.qubit.attempt.AttemptStatus.TERMINATED
+                && (appeal == null || !appeal.getAttempt().getId().equals(a.getId()));
+        boolean retake = r.getRetakeUntil() != null && Instant.now().isBefore(r.getRetakeUntil());
         return new RegistrationDto(r.getId(), r.getHallTicketNo(), r.getStatus(), r.getCreatedAt(),
                 new ExamBrief(e.getId(), e.getCode(), e.getTitle(), e.getCategory(), e.effectiveMode(), e.getDurationMinutes(),
                         e.getLateEntryMinutes(), e.getQuestions().size(), e.totalMarks(), e.getViolationTolerance(),
                         e.getInstructions()),
                 new SlotBrief(s.getId(), s.getStartsAt(), s.getLabel()),
                 u.getFullName(), u.getEmail(), u.getId(),
-                entryOpens(e, s), entryCloses(e, s), brief);
+                retake ? Instant.now() : entryOpens(e, s), retake ? r.getRetakeUntil() : entryCloses(e, s), brief,
+                appeal == null ? null : new AppealBrief(appeal.getId(), appeal.getStatus().name(), appeal.getMessage(),
+                        appeal.getCreatedAt(), appeal.getDecidedAt(), appeal.getDecisionNote(), appeal.getRetakeUntil()),
+                canAppeal, retake ? r.getRetakeUntil() : null);
     }
 
     public static Instant entryOpens(Exam e, ExamSlot s) {

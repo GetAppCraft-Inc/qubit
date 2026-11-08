@@ -32,7 +32,11 @@ public final class CandidateDtos {
 
     public record RegistrationDto(Long id, String hallTicketNo, RegistrationStatus status, Instant createdAt,
                                   ExamBrief exam, SlotBrief slot, String candidateName, String candidateEmail,
-                                  Long candidateId, Instant entryOpensAt, Instant entryClosesAt, AttemptBrief attempt) {}
+                                  Long candidateId, Instant entryOpensAt, Instant entryClosesAt, AttemptBrief attempt,
+                                  AppealBrief appeal, boolean canAppeal, Instant retakeUntil) {}
+
+    public record AppealBrief(Long id, String status, String message, Instant createdAt, Instant decidedAt,
+                              String decisionNote, Instant retakeUntil) {}
 
     /** slotId is required for proctored exams and ignored for open ones. */
     public record SlotChoice(Long slotId) {}

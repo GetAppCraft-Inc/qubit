@@ -38,4 +38,7 @@ public class Registration {
 
     @Column(nullable = false)
     private Instant createdAt = Instant.now();
+
+    /** Set when an appeal is approved: the candidate may start a fresh attempt until this time. */
+    private Instant retakeUntil;
 }

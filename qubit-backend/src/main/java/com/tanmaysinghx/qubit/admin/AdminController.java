@@ -22,6 +22,7 @@ public class AdminController {
     private final ExamAdminService exams;
     private final AdminQueryService queries;
     private final AttemptService attempts;
+    private final com.tanmaysinghx.qubit.integrity.IntegrityService integrity;
 
     @GetMapping("/overview")
     public Overview overview() {
@@ -106,8 +107,9 @@ public class AdminController {
     public List<EventRow> events(@PathVariable Long id) { return queries.events(id); }
 
     @PostMapping("/attempts/{id}/terminate")
-    public ViolationOutcome terminate(@PathVariable Long id, @RequestBody(required = false) TerminateRequest req) {
-        return attempts.recordViolation(id, null, ViolationType.ADMIN_TERMINATED, req == null ? null : req.reason());
+    public java.util.Map<String, Object> terminate(@PathVariable Long id, @RequestBody(required = false) TerminateRequest req) {
+        integrity.cancelAttempt(id, req == null ? null : req.reason());
+        return java.util.Map.of("terminated", true);
     }
 
     @GetMapping("/hall-tickets/{number}")

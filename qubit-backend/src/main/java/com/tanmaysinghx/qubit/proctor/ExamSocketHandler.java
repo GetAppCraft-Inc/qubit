@@ -95,6 +95,7 @@ public class ExamSocketHandler extends TextWebSocketHandler {
                     warn.put("counted", outcome.counted());
                     warn.put("violationCount", outcome.violationCount());
                     warn.put("tolerance", outcome.tolerance());
+                    warn.put("flagged", outcome.flagged());
                     hub.send(session, warn);
                 }
             }

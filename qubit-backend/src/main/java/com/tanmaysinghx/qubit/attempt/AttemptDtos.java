@@ -29,7 +29,7 @@ public final class AttemptDtos {
                            List<PaperQuestion> questions, List<AnswerDto> answers) {}
 
     public record ViolationOutcome(boolean counted, boolean terminated, int violationCount, int tolerance,
-                                   String label, String reason) {}
+                                   String label, String reason, boolean flagged) {}
 
     public record SubmitResult(AttemptStatus status, String terminationReason) {}
 }

@@ -9,7 +9,7 @@ import lombok.Setter;
 import java.time.Instant;
 
 @Entity
-@Table(name = "attempts")
+@Table(name = "attempts", indexes = @Index(name = "idx_attempts_registration", columnList = "registration_id"))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -18,10 +18,16 @@ public class Attempt {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** Unique: one registration can only ever have one attempt. */
-    @OneToOne(optional = false, fetch = FetchType.LAZY)
-    @JoinColumn(unique = true)
+    /**
+     * A registration has at most one ACTIVE (non-voided) attempt. An approved appeal voids the old attempt
+     * (kept for audit) so the candidate can start again.
+     */
+    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    @JoinColumn(name = "registration_id")
     private Registration registration;
+
+    /** Superseded by a retake granted on appeal. Ignored everywhere except the audit trail. */
+    private boolean voided;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

@@ -95,6 +95,45 @@ public class MailService {
         send(to, "Hall ticket · " + examTitle, body, null);
     }
 
+    @Async
+    public void sendAttemptCancelled(String to, String name, String examTitle, String reason) {
+        String link = props.frontendUrl() + "/app/registrations";
+        String body = MailTemplates.layout(
+                "Your attempt was cancelled",
+                "Hi " + MailTemplates.esc(firstName(name)) + ",",
+                "An invigilator cancelled your attempt at <strong>" + MailTemplates.esc(examTitle) + "</strong>.<br><br>"
+                        + "Reason: " + MailTemplates.esc(reason) + "<br><br>"
+                        + "If you think this was a mistake (a power cut, a dropped connection, a system pop-up), you can "
+                        + "appeal from your registrations page. Explain what happened; an invigilator will review it "
+                        + "and may allow you to take the exam again.",
+                "Open registrations", link,
+                "You can submit one appeal per attempt.");
+        send(to, "Attempt cancelled · " + examTitle, body, null);
+    }
+
+    @Async
+    public void sendAppealDecision(String to, String name, String examTitle, boolean approved, String note, Instant retakeUntil) {
+        String link = props.frontendUrl() + "/app/registrations";
+        String noteHtml = note == null || note.isBlank() ? "" : "<br><br>Note from the invigilator: " + MailTemplates.esc(note);
+        String body = approved
+                ? MailTemplates.layout(
+                        "Appeal approved — you can retake the exam",
+                        "Hi " + MailTemplates.esc(firstName(name)) + ",",
+                        "Your appeal for <strong>" + MailTemplates.esc(examTitle) + "</strong> was approved. "
+                                + "Your earlier attempt has been set aside and you get a fresh, full-length attempt.<br><br>"
+                                + "Start it before <strong>" + IST.format(retakeUntil) + "</strong>." + noteHtml,
+                        "Start the retake", link,
+                        "The same rules apply: one window, full screen, no switching away.")
+                : MailTemplates.layout(
+                        "Appeal not approved",
+                        "Hi " + MailTemplates.esc(firstName(name)) + ",",
+                        "We reviewed your appeal for <strong>" + MailTemplates.esc(examTitle) + "</strong> and could not "
+                                + "approve it. The cancellation stands." + noteHtml,
+                        "View registrations", link,
+                        "This decision is final for this attempt.");
+        send(to, (approved ? "Appeal approved · " : "Appeal decision · ") + examTitle, body, null);
+    }
+
     private void send(String to, String subject, String html, String devHint) {
         if (!enabled) {
             log.info("[mail disabled] to={} subject=\"{}\"{}", to, subject, devHint == null ? "" : " :: " + devHint);
