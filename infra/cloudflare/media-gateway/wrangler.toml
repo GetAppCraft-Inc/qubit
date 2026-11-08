@@ -1,0 +1,16 @@
+name = "qubit-media-gateway"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Route it on a custom domain (e.g. media.yourdomain.com) and set MEDIA_PUBLIC_BASE to that origin.
+# routes = [{ pattern = "media.yourdomain.com", custom_domain = true }]
+
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "qubit-media"   # = R2_BUCKET in the backend .env
+
+[vars]
+ALLOWED_ORIGIN = "https://app.yourdomain.com"
+
+# Secret (must equal MEDIA_URL_SECRET in the backend .env):
+#   npx wrangler secret put MEDIA_URL_SECRET
